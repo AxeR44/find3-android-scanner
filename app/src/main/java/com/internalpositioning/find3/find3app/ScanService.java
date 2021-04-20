@@ -6,6 +6,7 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothSocket;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -35,12 +36,18 @@ import org.json.JSONObject;
 
 import java.io.UnsupportedEncodingException;
 import java.util.List;
+import java.util.Timer;
+import java.util.TimerTask;
+import java.util.concurrent.ThreadPoolExecutor;
 
 /**
  * Created by zacks on 3/2/2018.
  */
 
 public class ScanService extends Service {
+
+    public static final String SCANSERVICE_ACTION_STOP = "com.internalpositioning.find3.find3app.stopScanService";
+
     // logging
     private final String TAG = "ScanService";
 
@@ -70,6 +77,22 @@ public class ScanService extends Service {
     private String serverAddress = "";
     private boolean allowGPS = false;
 
+    //Testing
+    private Boolean bluetoothResultsAvailable;
+    private boolean isCancelled;
+    Timer timer;
+
+    private BroadcastReceiver ServiceHandlerReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if(intent.getAction().equals(ScanService.SCANSERVICE_ACTION_STOP)){
+                Log.i("ScanService", "Stop signal Received: stopping service");
+                stopSelf();
+            }
+        }
+    };
+
+
     @Override
     public void onCreate() {
         // The service is being created
@@ -84,6 +107,10 @@ public class ScanService extends Service {
         IntentFilter intentFilter = new IntentFilter();
         intentFilter.addAction(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION);
         registerReceiver(mWifiScanReceiver, intentFilter);
+
+        intentFilter =new IntentFilter();
+        intentFilter.addAction(ScanService.SCANSERVICE_ACTION_STOP);
+        registerReceiver(ServiceHandlerReceiver, intentFilter);
 
         try {
             // setup bluetooth
@@ -106,78 +133,21 @@ public class ScanService extends Service {
         locationName = intent.getStringExtra("locationName");
         serverAddress = intent.getStringExtra("serverAddress");
         allowGPS = intent.getBooleanExtra("allowGPS", false);
+        isCancelled = false;
 
         Log.d(TAG, "familyName: " + familyName);
 
-        new java.util.Timer().schedule(
-                new java.util.TimerTask() {
-                    @Override
-                    public void run() {
-                        synchronized (lock) {
-                            if (isScanning == false) {
-                                doScan();
-                            }
-                        }
+        timer = new Timer();
+        timer.scheduleAtFixedRate(new TimerTask() {
+            @Override
+            public void run() {
+                synchronized (lock) {
+                    if (isScanning == false) {
+                        doScan();
                     }
-                },
-                0
-        );
-
-
-        new java.util.Timer().schedule(
-                new java.util.TimerTask() {
-                    @Override
-                    public void run() {
-                        synchronized (lock) {
-                            if (isScanning == false) {
-                                doScan();
-                            }
-                        }
-                    }
-                },
-                10000
-        );
-
-        new java.util.Timer().schedule(
-                new java.util.TimerTask() {
-                    @Override
-                    public void run() {
-                        synchronized (lock) {
-                            if (isScanning == false) {
-                                doScan();
-                            }
-                        }
-                    }
-                },
-                20000
-        );
-        new java.util.Timer().schedule(
-                new java.util.TimerTask() {
-                    @Override
-                    public void run() {
-                        synchronized (lock) {
-                            if (isScanning == false) {
-                                doScan();
-                            }
-                        }
-                    }
-                },
-                30000
-        );
-        new java.util.Timer().schedule(
-                new java.util.TimerTask() {
-                    @Override
-                    public void run() {
-                        synchronized (lock) {
-                            if (isScanning == false) {
-                                doScan();
-                            }
-                        }
-                        stopSelf(); // stop the service
-                    }
-                },
-                40000
-        );
+                }
+            }
+        }, 0, 31000);
 
         return START_STICKY;
     }
@@ -204,6 +174,9 @@ public class ScanService extends Service {
     public void onDestroy() {
         // The service is no longer used and is being destroyed
         Log.v(TAG, "onDestroy");
+        //testing
+        timer.cancel();
+        //end test
         try {
             if (receiver != null)
                 unregisterReceiver(receiver);
@@ -215,36 +188,58 @@ public class ScanService extends Service {
                 unregisterReceiver(mWifiScanReceiver);
         } catch (Exception e) {
             Log.w(TAG, e.toString());
+        }try{
+            if(ServiceHandlerReceiver != null)
+                unregisterReceiver(ServiceHandlerReceiver);
+        }catch (Exception e){
+            Log.w(TAG, e.toString());
         }
         stopSelf();
+        Log.i(TAG, "Service is destroyed");
         super.onDestroy();
-
     }
 
     private final BroadcastReceiver mWifiScanReceiver = new BroadcastReceiver() {
         @Override
-        public void onReceive(Context c, Intent intent) {
+        public void onReceive(Context c, final Intent intent) {
             // This condition is not necessary if you listen to only one action
-            if (intent.getAction().equals(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION)) {
-                Log.d(TAG, "timer off, trying to send data");
-                List<ScanResult> wifiScanList = wifi.getScanResults();
-                for (int i = 0; i < wifiScanList.size(); i++) {
-                    String name = wifiScanList.get(i).BSSID.toLowerCase();
-                    int rssi = wifiScanList.get(i).level;
-                    Log.v(TAG, "wifi: " + name + " => " + rssi + "dBm");
-                    try {
-                        wifiResults.put(name, rssi);
-                    } catch (Exception e) {
-                        Log.e(TAG, e.toString());
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    boolean cancelled;
+                    if (intent.getAction().equals(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION)) {
+                        boolean success = intent.getBooleanExtra(WifiManager.EXTRA_RESULTS_UPDATED, false);
+                        if(success){
+                            Log.d(TAG, "timer off, trying to send data");
+                            List<ScanResult> wifiScanList = wifi.getScanResults();
+                            for (int i = 0; i < wifiScanList.size(); i++) {
+                                String name = wifiScanList.get(i).BSSID.toLowerCase();
+                                int rssi = wifiScanList.get(i).level;
+                                Log.v(TAG, "wifi: " + name + " => " + rssi + "dBm");
+                                try {
+                                    wifiResults.put(name, rssi);
+                                } catch (Exception e) {
+                                    Log.e(TAG, e.toString());
+                                }
+                            }
+                            while(BTAdapter.isDiscovering()){}
+
+                            sendData();
+                        }else{
+                            while(BTAdapter.isDiscovering()){}
+                        }
+                        BTAdapter.cancelDiscovery();
+                        BTAdapter = BluetoothAdapter.getDefaultAdapter();
+                        synchronized (lock) {
+                            isScanning = false;
+                            cancelled = isCancelled;       //preventing Deadlock
+                        }
+                        if(cancelled){
+                            stopSelf();
+                        }
                     }
                 }
-                sendData();
-                BTAdapter.cancelDiscovery();
-                BTAdapter = BluetoothAdapter.getDefaultAdapter();
-                synchronized (lock) {
-                    isScanning = false;
-                }
-            }
+            }).start();
         }
     };
 
@@ -266,7 +261,7 @@ public class ScanService extends Service {
         Log.d(TAG, "started discovery");
     }
 
-    // bluetooth reciever
+    // bluetooth receiver
     private class BluetoothBroadcastReceiver extends BroadcastReceiver {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -281,6 +276,7 @@ public class ScanService extends Service {
                 } catch (Exception e) {
                     Log.e(TAG, e.toString());
                 }
+            }else if(BluetoothAdapter.ACTION_DISCOVERY_FINISHED.equals(action)){
             }
         }
     }

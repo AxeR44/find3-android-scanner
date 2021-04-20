@@ -222,9 +222,10 @@ public class MainActivity extends AppCompatActivity {
                     ll24.putExtra("serverAddress", serverAddress);
                     ll24.putExtra("locationName", locationName);
                     ll24.putExtra("allowGPS",allowGPS);
-                    recurringLl24 = PendingIntent.getBroadcast(MainActivity.this, 0, ll24, PendingIntent.FLAG_CANCEL_CURRENT);
+                    sendBroadcast(ll24);
+                    /*recurringLl24 = PendingIntent.getBroadcast(MainActivity.this, 0, ll24, PendingIntent.FLAG_CANCEL_CURRENT);
                     alarms = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
-                    alarms.setRepeating(AlarmManager.RTC_WAKEUP, SystemClock.currentThreadTimeMillis(), 60000, recurringLl24);
+                    alarms.setRepeating(AlarmManager.RTC_WAKEUP, SystemClock.currentThreadTimeMillis(), 60000, recurringLl24);*/
                     timer = new Timer();
                     oneSecondTimer = new RemindTask();
                     timer.scheduleAtFixedRate(oneSecondTimer, 1000, 1000);
@@ -253,14 +254,21 @@ public class MainActivity extends AppCompatActivity {
                     final TextView myClickableUrl = (TextView) findViewById(R.id.textInstructions);
                     myClickableUrl.setText("See your results in realtime: " + serverAddress + "/view/location/" + familyName + "/" + deviceName);
                     Linkify.addLinks(myClickableUrl, Linkify.WEB_URLS);
+
+                    //begin test
+                    //alarms.cancel(recurringLl24);
                 } else {
                     TextView rssi_msg = (TextView) findViewById(R.id.textOutput);
                     rssi_msg.setText("not running");
                     Log.d(TAG, "toggle set to false");
-                    alarms.cancel(recurringLl24);
                     android.app.NotificationManager mNotificationManager = (android.app.NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
                     mNotificationManager.cancel(0);
+                    /*alarms.cancel(recurringLl24);*/
                     timer.cancel();
+
+                    Intent stopService = new Intent();
+                    stopService.setAction(ScanService.SCANSERVICE_ACTION_STOP);
+                    sendBroadcast(stopService);
                 }
             }
         });
@@ -386,8 +394,4 @@ public class MainActivity extends AppCompatActivity {
         };
         mWebSocketClient.connect();
     }
-
-
-
-
 }
