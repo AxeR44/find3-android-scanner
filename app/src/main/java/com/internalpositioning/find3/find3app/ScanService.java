@@ -1,12 +1,8 @@
 package com.internalpositioning.find3.find3app;
 
-import android.app.Activity;
-import android.app.Notification;
-import android.app.PendingIntent;
 import android.app.Service;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
-import android.bluetooth.BluetoothSocket;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -17,8 +13,6 @@ import android.net.wifi.ScanResult;
 import android.net.wifi.WifiManager;
 import android.os.IBinder;
 import android.util.Log;
-import android.widget.EditText;
-import android.widget.TextView;
 
 import com.android.volley.AuthFailureError;
 import com.android.volley.NetworkResponse;
@@ -35,10 +29,10 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.UnsupportedEncodingException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
-import java.util.concurrent.ThreadPoolExecutor;
 
 /**
  * Created by zacks on 3/2/2018.
@@ -76,6 +70,7 @@ public class ScanService extends Service {
     private String deviceName = "";
     private String serverAddress = "";
     private boolean allowGPS = false;
+    private ArrayList<String> macAddr;
 
     //Testing
     private Boolean bluetoothResultsAvailable;
@@ -132,6 +127,7 @@ public class ScanService extends Service {
         familyName = intent.getStringExtra("familyName");
         locationName = intent.getStringExtra("locationName");
         serverAddress = intent.getStringExtra("serverAddress");
+        macAddr = intent.getStringArrayListExtra("macFiltering");
         allowGPS = intent.getBooleanExtra("allowGPS", false);
         isCancelled = false;
 
@@ -213,18 +209,23 @@ public class ScanService extends Service {
                             Log.d(TAG, "timer off, trying to send data");
                             List<ScanResult> wifiScanList = wifi.getScanResults();
                             for (int i = 0; i < wifiScanList.size(); i++) {
-                                String name = wifiScanList.get(i).BSSID.toLowerCase();
-                                int rssi = wifiScanList.get(i).level;
-                                Log.v(TAG, "wifi: " + name + " => " + rssi + "dBm");
-                                try {
-                                    wifiResults.put(name, rssi);
-                                } catch (Exception e) {
-                                    Log.e(TAG, e.toString());
+                                String name = wifiScanList.get(i).BSSID;
+                                if(macAddr.contains(name)){
+                                    name = name.toLowerCase();
+                                    int rssi = wifiScanList.get(i).level;
+                                    Log.v(TAG, "wifi: " + name + " => " + rssi + "dBm");
+                                    try {
+                                        wifiResults.put(name, rssi);
+                                    } catch (Exception e) {
+                                        Log.e(TAG, e.toString());
+                                    }
                                 }
                             }
                             while(BTAdapter.isDiscovering()){}
 
-                            sendData();
+                            if(wifiResults.length() != 0  || bluetoothResults.length() != 0){
+                                sendData();
+                            }
                         }else{
                             while(BTAdapter.isDiscovering()){}
                         }
@@ -269,13 +270,17 @@ public class ScanService extends Service {
             if (BluetoothDevice.ACTION_FOUND.equals(action)) {
                 int rssi = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, Short.MIN_VALUE);
                 BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-                String name = device.getAddress().toLowerCase();
-                Log.v(TAG, "bluetooth: " + name + " => " + rssi + "dBm");
-                try {
-                    bluetoothResults.put(name, rssi);
-                } catch (Exception e) {
-                    Log.e(TAG, e.toString());
+                String name = device.getAddress();
+                if(macAddr.contains(name)){
+                    name = name.toLowerCase();
+                    Log.v(TAG, "bluetooth: " + name + " => " + rssi + "dBm");
+                    try {
+                        bluetoothResults.put(name, rssi);
+                    } catch (Exception e) {
+                        Log.e(TAG, e.toString());
+                    }
                 }
+
             }else if(BluetoothAdapter.ACTION_DISCOVERY_FINISHED.equals(action)){
             }
         }

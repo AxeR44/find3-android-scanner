@@ -2,40 +2,24 @@ package com.internalpositioning.find3.find3app;
 
 import android.Manifest;
 import android.app.AlarmManager;
-import android.app.Notification;
-import android.app.NotificationManager;
 import android.app.PendingIntent;
-import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.BluetoothDevice;
-import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
-import android.location.Location;
-import android.location.LocationManager;
-import android.net.wifi.ScanResult;
-import android.net.wifi.WifiManager;
-import android.os.Build;
-import android.os.SystemClock;
-import android.support.v4.app.ActivityCompat;
+import android.graphics.Color;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.support.v4.app.NotificationCompat;
-import android.text.TextUtils;
 import android.text.util.Linkify;
 import android.util.Log;
-import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
 import android.widget.CheckBox;
 import android.widget.CompoundButton;
 import android.widget.EditText;
-import android.widget.SimpleAdapter;
 import android.widget.TextView;
-import android.widget.Toast;
 import android.widget.ToggleButton;
 
 import org.java_websocket.client.WebSocketClient;
@@ -45,6 +29,7 @@ import org.json.JSONObject;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -134,6 +119,8 @@ public class MainActivity extends AppCompatActivity {
         serverAddressEdit.setText(sharedPref.getString("serverAddress", ((EditText) findViewById(R.id.serverAddress)).getText().toString()));
         CheckBox checkBoxAllowGPS = (CheckBox) findViewById(R.id.allowGPS);
         checkBoxAllowGPS.setChecked(sharedPref.getBoolean("allowGPS",false));
+        EditText macFiltering = (EditText)findViewById(R.id.macFiltering);
+        macFiltering.setText(sharedPref.getString("macFiltering", ""));
 
 
         AutoCompleteTextView textView = (AutoCompleteTextView) findViewById(R.id.locationName);
@@ -165,6 +152,7 @@ public class MainActivity extends AppCompatActivity {
             public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
                 if (isChecked) {
                     TextView rssi_msg = (TextView) findViewById(R.id.textOutput);
+                    rssi_msg.setTextColor(Color.BLACK);
                     String familyName = ((EditText) findViewById(R.id.familyName)).getText().toString().toLowerCase();
                     if (familyName.equals("")) {
                         rssi_msg.setText("family name cannot be empty");
@@ -189,10 +177,29 @@ public class MainActivity extends AppCompatActivity {
                         buttonView.toggle();
                         return;
                     }
+                    String macFiltering = ((EditText)findViewById(R.id.macFiltering)).getText().toString().trim().toUpperCase();
+
+                    //TODO check if every line is a MAC address
+                    String[] tmp = macFiltering.split("\n");
+                    ArrayList<String> extrasMAC = new ArrayList<>();
+                    for(int i = 0; i < tmp.length; ++i){
+                        Log.i("TestMAC", tmp[i]);
+                        if(!MACUtility.isMacAddress(tmp[i])){
+                            rssi_msg.setTextColor(Color.RED);
+                            rssi_msg.setText(new StringBuilder()
+                            .append("String ")
+                            .append(tmp[i])
+                            .append(" is not a MAC address")
+                            .toString());
+                            buttonView.toggle();
+                            return;
+                        }
+                        extrasMAC.add(tmp[i]);
+                    }
+
                     boolean allowGPS = ((CheckBox) findViewById(R.id.allowGPS)).isChecked();
                     Log.d(TAG,"allowGPS is checked: "+allowGPS);
                     String locationName = ((EditText) findViewById(R.id.locationName)).getText().toString().toLowerCase();
-
                     CompoundButton trackingButton = (CompoundButton) findViewById(R.id.toggleScanType);
                     if (trackingButton.isChecked() == false) {
                         locationName = "";
@@ -211,6 +218,7 @@ public class MainActivity extends AppCompatActivity {
                     editor.putString("serverAddress", serverAddress);
                     editor.putString("locationName", locationName);
                     editor.putBoolean("allowGPS",allowGPS);
+                    editor.putString("macFiltering", macFiltering);
                     editor.commit();
 
                     rssi_msg.setText("running");
@@ -222,7 +230,11 @@ public class MainActivity extends AppCompatActivity {
                     ll24.putExtra("serverAddress", serverAddress);
                     ll24.putExtra("locationName", locationName);
                     ll24.putExtra("allowGPS",allowGPS);
+                    ll24.putStringArrayListExtra("macFiltering", extrasMAC);
                     sendBroadcast(ll24);
+
+
+
                     /*recurringLl24 = PendingIntent.getBroadcast(MainActivity.this, 0, ll24, PendingIntent.FLAG_CANCEL_CURRENT);
                     alarms = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
                     alarms.setRepeating(AlarmManager.RTC_WAKEUP, SystemClock.currentThreadTimeMillis(), 60000, recurringLl24);*/
@@ -272,8 +284,6 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         });
-
-
     }
 
 

@@ -7,6 +7,8 @@ import android.content.Intent;
 import android.os.PowerManager;
 import android.util.Log;
 
+import java.util.ArrayList;
+
 /**
  * Created by zacks on 3/2/2018.
  */
@@ -26,11 +28,12 @@ public class AlarmReceiverLife extends BroadcastReceiver {
         String deviceName = intent.getStringExtra("deviceName");
         String locationName = intent.getStringExtra("locationName");
         String serverAddress = intent.getStringExtra("serverAddress");
+        ArrayList<String> macArrayList = intent.getStringArrayListExtra("macFiltering");
         boolean allowGPS = intent.getBooleanExtra("allowGPS",false);
         Log.d(TAG,"familyName: "+ familyName);
 
         PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
-        wakeLock = pm.newWakeLock(PowerManager.FULL_WAKE_LOCK |
+        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK |
                 PowerManager.ACQUIRE_CAUSES_WAKEUP |
                 PowerManager.ON_AFTER_RELEASE, "WakeLock");
         wakeLock.acquire();
@@ -40,6 +43,7 @@ public class AlarmReceiverLife extends BroadcastReceiver {
         scanService.putExtra("locationName",locationName);
         scanService.putExtra("serverAddress",serverAddress);
         scanService.putExtra("allowGPS",allowGPS);
+        scanService.putStringArrayListExtra("macFiltering", macArrayList);
         try {
             context.startService(scanService);
         } catch (Exception e) {
