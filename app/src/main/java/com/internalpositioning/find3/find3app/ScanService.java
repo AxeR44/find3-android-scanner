@@ -3,6 +3,7 @@ package com.internalpositioning.find3.find3app;
 import android.app.Service;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothSocket;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -94,16 +95,18 @@ public class ScanService extends Service {
         Log.d(TAG, "creating new scan service");
         queue = Volley.newRequestQueue(this);
         // setup wifi
+        /*
         wifi = (WifiManager) this.getSystemService(Context.WIFI_SERVICE);
         if (wifi.isWifiEnabled() == false) {
             wifi.setWifiEnabled(true);
         }
         // register wifi intent filter
+        /*
         IntentFilter intentFilter = new IntentFilter();
         intentFilter.addAction(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION);
         registerReceiver(mWifiScanReceiver, intentFilter);
-
-        intentFilter =new IntentFilter();
+        */
+        IntentFilter intentFilter =new IntentFilter();
         intentFilter.addAction(ScanService.SCANSERVICE_ACTION_STOP);
         registerReceiver(ServiceHandlerReceiver, intentFilter);
 
@@ -113,6 +116,7 @@ public class ScanService extends Service {
             if (receiver == null) {
                 receiver = new BluetoothBroadcastReceiver();
                 registerReceiver(receiver, new IntentFilter(BluetoothDevice.ACTION_FOUND));
+                registerReceiver(receiver, new IntentFilter(BluetoothAdapter.ACTION_DISCOVERY_FINISHED));
             }
         } catch (Exception e) {
             Log.e(TAG, e.toString());
@@ -143,7 +147,7 @@ public class ScanService extends Service {
                     }
                 }
             }
-        }, 0, 31000);
+        }, 0, 5000);
 
         return START_STICKY;
     }
@@ -179,12 +183,12 @@ public class ScanService extends Service {
         } catch (Exception e) {
             Log.w(TAG, e.toString());
         }
-        try {
+        /*try {
             if (mWifiScanReceiver != null)
                 unregisterReceiver(mWifiScanReceiver);
         } catch (Exception e) {
             Log.w(TAG, e.toString());
-        }try{
+        }*/try{
             if(ServiceHandlerReceiver != null)
                 unregisterReceiver(ServiceHandlerReceiver);
         }catch (Exception e){
@@ -198,8 +202,9 @@ public class ScanService extends Service {
     private final BroadcastReceiver mWifiScanReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context c, final Intent intent) {
+            Log.e("WifiReceiver", "you shouldn't be here");
             // This condition is not necessary if you listen to only one action
-            new Thread(new Runnable() {
+            /*new Thread(new Runnable() {
                 @Override
                 public void run() {
                     boolean cancelled;
@@ -240,7 +245,7 @@ public class ScanService extends Service {
                         }
                     }
                 }
-            }).start();
+            }).start();*/
         }
     };
 
@@ -252,13 +257,13 @@ public class ScanService extends Service {
             isScanning = true;
         }
         bluetoothResults = new JSONObject();
-        wifiResults = new JSONObject();
+        //wifiResults = new JSONObject();
         BTAdapter.startDiscovery();
-        if (wifi.startScan()) {
+        /*if (wifi.startScan()) {
             Log.d(TAG, "started wifi scan");
         } else {
             Log.w(TAG, "started wifi scan false?");
-        }
+        }*/
         Log.d(TAG, "started discovery");
     }
 
@@ -282,6 +287,25 @@ public class ScanService extends Service {
                 }
 
             }else if(BluetoothAdapter.ACTION_DISCOVERY_FINISHED.equals(action)){
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        boolean cancelled;
+                        Log.d(TAG, "timer off, trying to send data");
+                        BTAdapter.cancelDiscovery();
+                        if(bluetoothResults.length() != 0){
+                            sendData();
+                        }
+                        BTAdapter = BluetoothAdapter.getDefaultAdapter();
+                        synchronized (lock) {
+                            isScanning = false;
+                            cancelled = isCancelled;       //preventing Deadlock
+                        }
+                        if(cancelled){
+                            stopSelf();
+                        }
+                    }
+                }).start();
             }
         }
     }
@@ -298,9 +322,11 @@ public class ScanService extends Service {
             jsonBody.put("t", System.currentTimeMillis());
             JSONObject sensors = new JSONObject();
             sensors.put("bluetooth", bluetoothResults);
-            sensors.put("wifi", wifiResults);
+            sensors.put("wifi", wifiResults);   //ALWAYS PUTTING EMPTY JObj
             jsonBody.put("s", sensors);
-            if (allowGPS) {
+
+            //ignoring gps unconditionally
+            /*if (allowGPS) {
                 JSONObject gps = new JSONObject();
                 Location loc = getLastBestLocation();
                 if (loc != null) {
@@ -309,7 +335,7 @@ public class ScanService extends Service {
                     gps.put("alt",loc.getAltitude());
                     jsonBody.put("gps",gps);
                 }
-            }
+            }*/
 
             final String mRequestBody = jsonBody.toString();
             Log.d(TAG, mRequestBody);
@@ -356,9 +382,11 @@ public class ScanService extends Service {
         }
     }
 
+
     /**
      * @return the last know best location
      */
+    /*
     private Location getLastBestLocation() {
         LocationManager mLocationManager = (LocationManager)
                 getSystemService(Context.LOCATION_SERVICE);
@@ -385,5 +413,5 @@ public class ScanService extends Service {
             Log.d("GPS",locationNet.toString());
             return locationNet;
         }
-    }
+    }*/
 }
